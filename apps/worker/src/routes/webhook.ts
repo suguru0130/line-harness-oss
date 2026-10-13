@@ -21,6 +21,7 @@ import {
 } from '@line-crm/db';
 import type { EntryRoute } from '@line-crm/db';
 import { fireEvent } from '../services/event-bus.js';
+import { notifyStaffOfNewMessage } from '../services/staff-push.js';
 import { buildMessage, expandVariables } from '../services/step-delivery.js';
 import type { Env } from '../index.js';
 
@@ -123,7 +124,7 @@ webhook.post('/webhook', async (c) => {
   const processingPromise = (async () => {
     for (const event of body.events) {
       try {
-        await handleEvent(db, lineClient, event, channelAccessToken, matchedAccountId, c.env.WORKER_URL || new URL(c.req.url).origin, c.env.LIFF_URL, c.env.IMAGES);
+        await handleEvent(db, lineClient, event, channelAccessToken, matchedAccountId, c.env.WORKER_URL || new URL(c.req.url).origin, c.env.LIFF_URL, c.env.IMAGES, c.env.EXPO_ACCESS_TOKEN);
       } catch (err) {
         console.error('Error handling webhook event:', err);
       }
@@ -144,6 +145,7 @@ async function handleEvent(
   workerUrl?: string,
   liffUrl?: string,
   r2?: R2Bucket,
+  expoAccessToken?: string,
 ): Promise<void> {
   if (event.type === 'follow') {
     const userId =
@@ -458,6 +460,15 @@ async function handleEvent(
       )
       .bind(crypto.randomUUID(), friend.id, msg.type, finalContent, jstNow())
       .run();
+    try {
+      await notifyStaffOfNewMessage(
+        db,
+        { friendId: friend.id, displayName: friend.display_name, preview: content },
+        { expoAccessToken },
+      );
+    } catch (err) {
+      console.error('staff push (new message) failed:', err instanceof Error ? err.name : 'error');
+    }
     return;
   }
 
@@ -483,6 +494,16 @@ async function handleEvent(
       .bind(logId, friend.id, incomingText, now)
       .run();
 
+    const pushTask = notifyStaffOfNewMessage(
+      db,
+      { friendId: friend.id, displayName: friend.display_name, preview: incomingText },
+      { expoAccessToken },
+    ).catch((err) => {
+      console.error('staff push (new message) failed:', err instanceof Error ? err.name : 'error');
+    });
+
+    // 自動返信の return より先に送り始める。途中で return しても finally で送り切る。
+    try {
     // Cross-account trigger: send message from another account via UUID
     if (incomingText === '体験を完了する' && lineAccountId) {
       try {
@@ -616,6 +637,9 @@ async function handleEvent(
       eventData: { text: incomingText, matched },
       replyToken: replyTokenConsumed ? undefined : event.replyToken,
     }, lineAccessToken, lineAccountId);
+    } finally {
+      await pushTask;
+    }
 
     return;
   }

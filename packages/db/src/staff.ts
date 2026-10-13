@@ -1,3 +1,4 @@
+import { deleteStaffPushState } from './staff-push.js';
 import { jstNow } from './utils.js';
 
 export interface StaffMember {
@@ -104,6 +105,13 @@ export async function updateStaffMember(
 }
 
 export async function deleteStaffMember(db: D1Database, id: string): Promise<void> {
+  try {
+    await deleteStaffPushState(db, id);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    // マイグレーション前の DB でもスタッフ削除自体は続ける。
+    if (!/no such table/i.test(message)) throw err;
+  }
   await db.prepare('DELETE FROM staff_members WHERE id = ?').bind(id).run();
 }
 

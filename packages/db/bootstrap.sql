@@ -714,6 +714,29 @@ CREATE TABLE staff_menus (
   FOREIGN KEY (menu_id) REFERENCES menus(id)
 );
 
+CREATE TABLE staff_notification_settings (
+  staff_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('new_message', 'unreplied', 'booking_request')),
+  enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+  scope TEXT NOT NULL DEFAULT 'all' CHECK (scope IN ('assigned', 'all')),
+  unreplied_minutes INTEGER CHECK (
+    unreplied_minutes IS NULL
+    OR (unreplied_minutes >= 1 AND unreplied_minutes <= 10080)
+  ),
+  include_body INTEGER NOT NULL DEFAULT 1 CHECK (include_body IN (0, 1)),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours')),
+  PRIMARY KEY (staff_id, kind)
+);
+
+CREATE TABLE staff_push_devices (
+  id TEXT PRIMARY KEY,
+  staff_id TEXT NOT NULL,
+  expo_push_token TEXT NOT NULL UNIQUE,
+  platform TEXT NOT NULL DEFAULT 'unknown' CHECK (platform IN ('ios', 'android', 'unknown')),
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours'))
+);
+
 CREATE TABLE staff_shifts (
   id          TEXT PRIMARY KEY,
   staff_id    TEXT NOT NULL,
@@ -724,6 +747,14 @@ CREATE TABLE staff_shifts (
   updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours')),
   UNIQUE (staff_id, work_date),
   FOREIGN KEY (staff_id) REFERENCES staff(id)
+);
+
+CREATE TABLE staff_unreplied_alerts (
+  staff_id TEXT NOT NULL,
+  friend_id TEXT NOT NULL,
+  incoming_at TEXT NOT NULL,
+  notified_at TEXT NOT NULL,
+  PRIMARY KEY (staff_id, friend_id, incoming_at)
 );
 
 CREATE TABLE stripe_events (
@@ -947,6 +978,11 @@ CREATE INDEX idx_staff_account_sort ON staff (line_account_id, sort_order);
 CREATE UNIQUE INDEX idx_staff_members_api_key ON staff_members(api_key);
 
 CREATE INDEX idx_staff_members_role ON staff_members(role);
+
+CREATE INDEX idx_staff_push_devices_staff ON staff_push_devices (staff_id);
+
+CREATE INDEX idx_staff_unreplied_alerts_friend
+  ON staff_unreplied_alerts (friend_id, incoming_at);
 
 CREATE INDEX idx_stripe_events_friend ON stripe_events (friend_id);
 
