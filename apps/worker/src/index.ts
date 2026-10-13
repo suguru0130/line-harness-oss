@@ -21,6 +21,7 @@ import { processDueEventReminders } from './services/event-booking-reminders.js'
 import { runEventBookingExpirer } from './services/event-booking-expirer.js';
 import { sendEventBookingNotification } from './services/event-booking-notifier.js';
 import { sendBookingNotification } from './services/booking-notifier.js';
+import { processUnrepliedPushAlerts } from './services/staff-push.js';
 import { DEFAULT_ACCOUNT_SETTINGS } from './services/booking-types.js';
 import { authMiddleware } from './middleware/auth.js';
 import { rateLimitMiddleware } from './middleware/rate-limit.js';
@@ -73,6 +74,7 @@ import { profileRefresh } from './routes/profile-refresh.js';
 import { richMenuGroups } from './routes/rich-menu-groups.js';
 import adminVersion from './routes/admin-version.js';
 import adminUpdate from './routes/admin-update.js';
+import { staffPush } from './routes/staff-push.js';
 
 export type Env = {
   Bindings: {
@@ -107,6 +109,9 @@ export type Env = {
     WORKER_PUBLIC_URL?: string;
     ADMIN_PUBLIC_URL?: string;
     LIFF_PUBLIC_URL?: string;
+    // Optional. Expo push works without it; set it when the Expo project
+    // requires an access token. Never log the value.
+    EXPO_ACCESS_TOKEN?: string;
   };
   Variables: {
     staff: { id: string; name: string; role: 'owner' | 'admin' | 'staff' };
@@ -170,6 +175,7 @@ app.route('/', messageTemplates);
 app.route('/', dedupPreview);
 app.route('/', profileRefresh);
 app.route('/', richMenuGroups);
+app.route('/', staffPush);
 
 // Phase 5 (upgrade flow) — public build metadata endpoint. Mounted under
 // /admin/ but intentionally unauthenticated: the dashboard fetches /admin/version
@@ -623,6 +629,19 @@ async function scheduled(
     }
   } catch (e) {
     console.error('event-booking-reminders error:', e);
+  }
+
+  // 未返信アラート。5分ごとの tick で見る。送信済みは D1 に記録して繰り返さない。
+  try {
+    const result = await processUnrepliedPushAlerts(env.DB, {
+      now: new Date(),
+      expoAccessToken: env.EXPO_ACCESS_TOKEN,
+    });
+    if (result.sent > 0) {
+      console.log(`[staff-push] unreplied sent=${result.sent}`);
+    }
+  } catch (e) {
+    console.error('staff-push unreplied error:', e instanceof Error ? e.name : 'error');
   }
 
   // Event-booking expirer — 6h cron tick.

@@ -854,6 +854,46 @@ export interface StaffProfile {
   email: string | null;
 }
 
+// -----------------------------------------------------------------------------
+// スタッフ向け Expo プッシュ通知 (L-SP)
+// -----------------------------------------------------------------------------
+
+/** 新着メッセージ / 未返信アラート / 予約申込 */
+export const STAFF_PUSH_KINDS = ['new_message', 'unreplied', 'booking_request'] as const;
+export type StaffPushKind = (typeof STAFF_PUSH_KINDS)[number];
+
+/** assigned = チャット担当が自分のスレッドだけ。all = 全体 */
+export const STAFF_PUSH_SCOPES = ['assigned', 'all'] as const;
+export type StaffPushScope = (typeof STAFF_PUSH_SCOPES)[number];
+
+export const STAFF_PUSH_KIND_LABELS: Record<StaffPushKind, string> = {
+  new_message: '新着メッセージ',
+  unreplied: '未返信アラート',
+  booking_request: '予約申込',
+};
+
+export type StaffPushPlatform = 'ios' | 'android' | 'unknown';
+
+export interface StaffPushDevice {
+  id: string;
+  staffId: string;
+  token: string;
+  platform: StaffPushPlatform;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StaffNotificationSetting {
+  kind: StaffPushKind;
+  label: string;
+  enabled: boolean;
+  scope: StaffPushScope;
+  /** 通知文にメッセージ本文や予約メモを入れるか */
+  includeBody: boolean;
+  /** unreplied のときだけ分。それ以外は null */
+  unrepliedMinutes: number | null;
+}
+
 // =============================================================================
 // API レスポンスラッパー型
 // =============================================================================

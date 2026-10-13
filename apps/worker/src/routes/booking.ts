@@ -20,6 +20,7 @@ import {
   saveIdempotencyResponse,
 } from '../services/booking-idempotency.js';
 import { sendBookingNotification } from '../services/booking-notifier.js';
+import { notifyStaffOfSalonBooking } from '../services/staff-push.js';
 import {
   DEFAULT_ACCOUNT_SETTINGS,
   IDEMPOTENCY_TTL_MINUTES,
@@ -431,6 +432,13 @@ booking.post('/api/liff/booking/requests', async (c) => {
     notifyForBooking(c.env.DB, bookingId, 'requested').catch((err) =>
       console.error('booking notify (requested) failed:', err),
     ),
+  );
+  c.executionCtx.waitUntil(
+    notifyStaffOfSalonBooking(c.env.DB, bookingId, {
+      expoAccessToken: c.env.EXPO_ACCESS_TOKEN,
+    }).catch((err) => {
+      console.error('staff push (booking requested) failed:', err instanceof Error ? err.name : 'error');
+    }),
   );
 
   const responseBody = { booking_id: bookingId, status: 'requested' };
