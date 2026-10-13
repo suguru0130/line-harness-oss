@@ -1,7 +1,25 @@
 // ─── Config ─────────────────────────────────────────────
+/**
+ * Read-only view of the operator's server URL and API key.
+ * Structurally compatible with `@line-crm/shared`'s `ApiCredentialStore`,
+ * so web (localStorage) and mobile (expo-secure-store) can pass the same object.
+ * Implementations must not log the API key.
+ */
+export interface ApiCredentialSource {
+  getServerUrl(): string | null | Promise<string | null>
+  getApiKey(): string | null | Promise<string | null>
+}
+
 export interface LineHarnessConfig {
-  apiUrl: string
-  apiKey: string
+  /** Required unless `credentials` supplies the URL on each request. */
+  apiUrl?: string
+  /** Required unless `credentials` supplies the key on each request. */
+  apiKey?: string
+  /**
+   * Pluggable server URL and API key.
+   * When a value is present it overrides `apiUrl` / `apiKey` for HTTP calls.
+   */
+  credentials?: ApiCredentialSource
   timeout?: number  // default: 30000ms
   lineAccountId?: string  // default account for multi-account setups
 }

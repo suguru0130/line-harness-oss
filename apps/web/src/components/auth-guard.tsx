@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
+import { webCredentialStore } from '@/lib/credential-store'
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -8,16 +9,23 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const [checked, setChecked] = useState(false)
 
   useEffect(() => {
-    if (pathname === '/login') {
-      setChecked(true)
-      return
+    let cancelled = false
+    async function check() {
+      if (pathname === '/login') {
+        setChecked(true)
+        return
+      }
+      const key = await webCredentialStore.getApiKey()
+      if (cancelled) return
+      if (!key) {
+        router.replace('/login')
+      } else {
+        setChecked(true)
+      }
     }
-
-    const key = localStorage.getItem('lh_api_key')
-    if (!key) {
-      router.replace('/login')
-    } else {
-      setChecked(true)
+    void check()
+    return () => {
+      cancelled = true
     }
   }, [pathname, router])
 

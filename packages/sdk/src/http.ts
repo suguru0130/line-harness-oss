@@ -1,20 +1,37 @@
 import { LineHarnessError } from './errors.js'
+import type { ApiCredentialSource } from './types.js'
 
 interface HttpClientConfig {
   baseUrl: string
   apiKey: string
   timeout: number
+  credentials?: ApiCredentialSource
 }
 
 export class HttpClient {
   private readonly baseUrl: string
   private readonly apiKey: string
   private readonly timeout: number
+  private readonly credentials: ApiCredentialSource | undefined
 
   constructor(config: HttpClientConfig) {
     this.baseUrl = config.baseUrl.replace(/\/$/, '')
     this.apiKey = config.apiKey
     this.timeout = config.timeout
+    this.credentials = config.credentials
+  }
+
+  private async resolveAuth(): Promise<{ baseUrl: string; apiKey: string }> {
+    if (!this.credentials) {
+      return { baseUrl: this.baseUrl, apiKey: this.apiKey }
+    }
+    const serverUrl = await this.credentials.getServerUrl()
+    const apiKey = await this.credentials.getApiKey()
+    const baseUrl = (serverUrl ?? this.baseUrl).replace(/\/$/, '')
+    if (!baseUrl) {
+      throw new LineHarnessError('Server URL is not set', 0, 'credentials')
+    }
+    return { baseUrl, apiKey: apiKey ?? this.apiKey }
   }
 
   async get<T = unknown>(path: string): Promise<T> {
@@ -38,9 +55,10 @@ export class HttpClient {
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const url = `${this.baseUrl}${path}`
+    const auth = await this.resolveAuth()
+    const url = `${auth.baseUrl}${path}`
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${this.apiKey}`,
+      Authorization: `Bearer ${auth.apiKey}`,
       'Content-Type': 'application/json',
     }
 

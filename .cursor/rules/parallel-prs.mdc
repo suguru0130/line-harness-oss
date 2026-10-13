@@ -1,0 +1,13 @@
+---
+description: 並列エージェントの PR の分け方とマージ条件
+alwaysApply: true
+---
+
+# 並列 PR のルール
+
+- ブランチ名は小文字の `cursor/<短いトピック>`。1 つの PR で 1 つのテーマだけ扱う。
+- `main` に直接 push しない。PR を出し、GitHub Actions の必須チェック `CI / ci` が成功してからマージする。
+- 画面や機能は小さく分ける。ログイン、友だち、チャットの受信箱、配信、プッシュ通知、ダッシュボード、ストア申請は、それぞれ別 PR にする。
+- 製品仕様が決まるまでは、`apps/mobile` のホームをプレースホルダのままにする。見た目の仕様を勝手に足さない。
+- Web (`apps/web`) と Worker (`apps/worker`) の既存挙動を壊さない。API キーの保存名 `lh_api_key` を変えない。
+- レビュー観点は `REVIEW.md` と `.cursor/rules/review.mdc` に従う。

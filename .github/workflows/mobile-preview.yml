@@ -1,0 +1,95 @@
+name: Mobile device preview
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: mobile-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    name: expo-go
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check EXPO_TOKEN
+        id: expo
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -n "$EXPO_TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Comment that Expo Go preview was skipped
+        if: steps.expo.outputs.present != 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- line-crm-expo-preview -->'
+            const body = [
+              marker,
+              '### Expo Go プレビューはスキップしました',
+              '',
+              '`EXPO_TOKEN` がこのリポジトリの GitHub Actions secret に無いので、実機用の更新は配信していません。CI の成否には影響しません。',
+              '',
+              '実機で開くには:',
+              '',
+              '1. Expo のアクセストークンを作る（https://expo.dev/settings/access-tokens）',
+              '2. リポジトリの Settings → Secrets and variables → Actions に、名前 `EXPO_TOKEN` で追加する',
+              '3. このワークフローを再実行する',
+              '',
+              'プロジェクト ID `813ad40d-1c28-4532-9d5e-bb04b670fe87` は `apps/mobile/app.config.ts` に入っています。手順の詳細は `apps/mobile/README.md` です。',
+            ].join('\n')
+            const { owner, repo } = context.repo
+            const issue_number = context.issue.number
+            const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number, per_page: 100 })
+            const existing = comments.find((comment) => comment.body && comment.body.includes(marker))
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body })
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body })
+            }
+
+      - uses: pnpm/action-setup@v4
+        if: steps.expo.outputs.present == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.expo.outputs.present == 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install and build shared packages
+        if: steps.expo.outputs.present == 'true'
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @line-crm/shared build
+          pnpm --filter @line-crm/admin-client build
+          pnpm --filter @line-harness/sdk build
+
+      - name: Setup EAS
+        if: steps.expo.outputs.present == 'true'
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+          packager: pnpm
+
+      - name: Publish Expo Go preview
+        if: steps.expo.outputs.present == 'true'
+        uses: expo/expo-github-action/preview@v8
+        with:
+          working-directory: apps/mobile
+          qr-target: expo-go
+          command: eas update --auto --branch pr-${{ github.event.pull_request.number }} --message "PR #${{ github.event.pull_request.number }}" --non-interactive
+        env:
+          EXPO_OWNER: ${{ vars.EXPO_OWNER }}

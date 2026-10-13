@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { webCredentialStore } from '@/lib/credential-store'
 
 export default function LoginPage() {
   const [apiKey, setApiKey] = useState('')
@@ -15,7 +16,7 @@ export default function LoginPage() {
 
     try {
       // Validate by calling a simple endpoint
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL
+      const apiUrl = await webCredentialStore.getServerUrl()
       if (!apiUrl) {
         setError('NEXT_PUBLIC_API_URL is not set in build env')
         setLoading(false)
@@ -26,7 +27,7 @@ export default function LoginPage() {
       })
 
       if (res.ok) {
-        localStorage.setItem('lh_api_key', apiKey)
+        await webCredentialStore.setApiKey(apiKey)
         // Fetch staff profile for name/role display
         try {
           const profileRes = await fetch(`${apiUrl}/api/staff/me`, {
