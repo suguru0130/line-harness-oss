@@ -90,6 +90,6 @@ jobs:
         with:
           working-directory: apps/mobile
           qr-target: expo-go
-          command: eas update --auto --branch pr-${{ github.event.pull_request.number }} --message "PR #${{ github.event.pull_request.number }}" --non-interactive
+          command: 'eas update --auto --branch pr-${{ github.event.pull_request.number }} --message "PR #${{ github.event.pull_request.number }}" --non-interactive'
         env:
           EXPO_OWNER: ${{ vars.EXPO_OWNER }}
