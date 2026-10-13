@@ -1,12 +1,15 @@
+import './bind-fetch'
+
 import {
   api,
   createSecureStoreCredentialStore,
   fetchApi,
   setAdminCredentialStore,
 } from '@line-crm/admin-client'
-import * as SecureStore from 'expo-secure-store'
 
-export const mobileCredentialStore = createSecureStoreCredentialStore(SecureStore)
+import { mobileSecureStorage } from './secure-storage'
+
+export const mobileCredentialStore = createSecureStoreCredentialStore(mobileSecureStorage)
 
 setAdminCredentialStore(mobileCredentialStore)
 

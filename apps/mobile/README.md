@@ -1,6 +1,8 @@
-# LINE CRM モバイル
+# L-SP
 
-オペレーター向けの iOS / Android アプリの土台です。画面はまだプレースホルダで、中身の機能は別の PR で足します。バックエンドは今の Cloudflare Worker のままです。
+オペレーター向けの iOS / Android アプリです。スマホだけで、自分の Cloudflare Worker に接続して運用します。表示名は L-SP です。
+
+ログイン（サーバー URL と API キー、複数の接続先）、LINE アカウントの切替、タブ（ホーム、受信箱、友だち、配信、その他）、設定は入っています。各タブの中身はプレースホルダで、機能は別の PR で足します。足し方は `CONTRIBUTING-screens.md` です。バックエンドは今の Cloudflare Worker のままです。
 
 ## 手元で起動する
 
@@ -11,7 +13,7 @@ pnpm install
 pnpm --filter mobile start
 ```
 
-`start` は共有パッケージをビルドしてから `expo start` します。表示された QR を Expo Go で読むと、プレースホルダのホームが開きます。
+`start` は共有パッケージをビルドしてから `expo start` します。表示された QR を Expo Go で読むと、ログイン画面が開きます。接続すると、プレースホルダのタブが開きます。
 
 型とテストだけ見るとき:
 
@@ -28,7 +30,11 @@ pnpm --filter mobile test
 
 - Expo SDK 57、Expo Router、TypeScript
 - NativeWind（Tailwind のクラス名で見た目を書く）
-- サーバー URL と API キーの保存先は `expo-secure-store`。Web 管理画面の `localStorage`（`lh_api_key`）と同じ契約です
+- ログイン。サーバー URL と API キーを確かめ、複数の接続先を保存できる。いま有効な鍵の名前は `lh_api_key`、URL は `lh_server_url`。実機の保存先は `expo-secure-store`。ブラウザで開いたときだけ、同じキー名で localStorage を使う
+- LINE アカウントの切替ヘッダー。選択中の ID は `lh_selected_account`
+- 権限の表示分け（owner / admin / staff）。配信の作成は admin 以上
+- タブとプレースホルダ、設定（接続、ログアウト、バージョン、任意の生体認証ロック）
+- 共通 UI（リスト、カード、入力、確認ダイアログ、空・失敗・読み込み）
 - API クライアントは `packages/admin-client`。公式 SDK（`@line-harness/sdk`）も同じ保存先を受け取れます
 
 バンドル ID は仮の `app.linecrm.operator` です。ストアに出す PR で本番の ID に変えます。アイコンもテンプレートのままです。

@@ -6,6 +6,7 @@ export default defineConfig({
     alias: {
       '@line-crm/admin-client': path.resolve(__dirname, '../../packages/admin-client/src/index.ts'),
       '@line-crm/shared': path.resolve(__dirname, '../../packages/shared/src/index.ts'),
+      '@': path.resolve(__dirname, './src'),
     },
   },
   test: {

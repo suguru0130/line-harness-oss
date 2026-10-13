@@ -11,7 +11,7 @@ const EAS_PROJECT_ID = '813ad40d-1c28-4532-9d5e-bb04b670fe87'
  */
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
-  name: 'LINE CRM',
+  name: 'L-SP',
   slug: 'line-sp-project',
   ...(process.env.EXPO_OWNER ? { owner: process.env.EXPO_OWNER } : {}),
   version: '0.1.0',
@@ -40,6 +40,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   plugins: [
     'expo-router',
+    [
+      'expo-local-authentication',
+      {
+        faceIDPermission: 'L-SP のロック解除に Face ID を使います',
+      },
+    ],
     [
       'expo-splash-screen',
       {
