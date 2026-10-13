@@ -51,6 +51,8 @@ Expo のプロジェクト ID は `813ad40d-1c28-4532-9d5e-bb04b670fe87` です�
 
 `.github/workflows/mobile-preview.yml` が、PR ごとに `eas update --branch pr-<番号>` を実行し、PR に QR コードと Expo Go 用リンクをコメントします。iPhone でも Android でも、Expo Go からその PR の JS を開けます。
 
+`eas update` は `pnpm exec` を通さないので、pnpm が普段足している `NODE_PATH` がありません。NativeWind が名前で読む `@babel/plugin-transform-react-jsx` は、そのため `apps/mobile` の直接の依存にしています。
+
 `EXPO_TOKEN` が無いときは配信せず、理由を PR にコメントして終了します。このときワークフローは失敗にしません。トークンを足したあとに、そのワークフローを再実行してください。
 
 プロジェクトを結び直す必要が出たときだけ、`apps/mobile` で `eas init` を実行します。ID はすでに入っているので、通常の開発では不要です。`slug` は Expo 側の `line-sp-project` に合わせています。

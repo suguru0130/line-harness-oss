@@ -148,6 +148,9 @@ importers:
         specifier: 3.4.17
         version: 3.4.17
     devDependencies:
+      '@babel/plugin-transform-react-jsx':
+        specifier: ^7.28.6
+        version: 7.29.7(@babel/core@7.29.0)
       '@types/react':
         specifier: ~19.2.2
         version: 19.2.14
@@ -506,10 +509,6 @@ packages:
 
   '@babel/helper-optimise-call-expression@7.29.7':
     resolution: {integrity: sha512-+kmGVjcT9RGYzoDwdwEqEvGgKe3BYq+O1iGzjFubaNgZHwYHP6lsF2Yghf4kEuv9BV7tYDZ913aBW9am6YKong==}
-    engines: {node: '>=6.9.0'}
-
-  '@babel/helper-plugin-utils@7.28.6':
-    resolution: {integrity: sha512-S9gzZ/bz83GRysI7gAD4wPT/AI3uCnY+9xn+Mx/KPs2JwHJIz1W8PZkg2cqyt3RNOBM8ejcXhV6y8Og7ly/Dug==}
     engines: {node: '>=6.9.0'}
 
   '@babel/helper-plugin-utils@7.29.7':
@@ -7504,8 +7503,6 @@ snapshots:
     dependencies:
       '@babel/types': 7.29.8
 
-  '@babel/helper-plugin-utils@7.28.6': {}
-
   '@babel/helper-plugin-utils@7.29.7': {}
 
   '@babel/helper-remap-async-to-generator@7.29.7(@babel/core@7.29.0)':
@@ -7782,12 +7779,12 @@ snapshots:
   '@babel/plugin-transform-react-jsx-self@7.27.1(@babel/core@7.29.0)':
     dependencies:
       '@babel/core': 7.29.0
-      '@babel/helper-plugin-utils': 7.28.6
+      '@babel/helper-plugin-utils': 7.29.7
 
   '@babel/plugin-transform-react-jsx-source@7.27.1(@babel/core@7.29.0)':
     dependencies:
       '@babel/core': 7.29.0
-      '@babel/helper-plugin-utils': 7.28.6
+      '@babel/helper-plugin-utils': 7.29.7
 
   '@babel/plugin-transform-react-jsx@7.29.7(@babel/core@7.29.0)':
     dependencies:
@@ -10002,7 +9999,9 @@ snapshots:
       metro-runtime: 0.84.6
     transitivePeerDependencies:
       - '@babel/core'
+      - bufferutil
       - supports-color
+      - utf-8-validate
 
   '@react-native/normalize-colors@0.74.89': {}
 
@@ -13092,7 +13091,7 @@ snapshots:
   metro-source-map@0.84.6:
     dependencies:
       '@babel/traverse': 7.29.0
-      '@babel/types': 7.29.0
+      '@babel/types': 7.29.8
       flow-enums-runtime: 0.0.6
       invariant: 2.2.4
       metro-symbolicate: 0.84.6
