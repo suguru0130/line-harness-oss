@@ -18,6 +18,7 @@ export { ConversationsResource } from './resources/conversations.js'
 
 // All types
 export type {
+  ApiCredentialSource,
   LineHarnessConfig,
   ApiResponse,
   PaginatedData,

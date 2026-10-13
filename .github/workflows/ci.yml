@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  packages:
+    name: packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @line-crm/shared build
+      - run: pnpm --filter @line-crm/admin-client build
+      - run: pnpm --filter @line-crm/shared typecheck
+      - run: pnpm --filter @line-crm/admin-client typecheck
+      - run: pnpm --filter @line-crm/admin-client test
+      - run: pnpm --filter @line-harness/sdk typecheck
+      - run: pnpm --filter @line-harness/sdk test
+      - run: pnpm exec eslint packages/admin-client packages/sdk/src packages/shared/src packages/sdk/tests/credentials.test.ts
+
+  web:
+    name: web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @line-crm/shared build
+      - run: pnpm --filter @line-crm/admin-client build
+      - run: pnpm --filter @line-harness/update-engine build
+      - run: pnpm --filter web typecheck
+      - run: pnpm --filter web lint
+      - run: pnpm --filter web test
+      - run: pnpm --filter web build
+        env:
+          NEXT_PUBLIC_API_URL: https://example.test
+
+  worker:
+    name: worker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @line-crm/shared --filter @line-crm/line-sdk --filter @line-crm/db --filter @line-harness/update-engine build
+      - run: pnpm --filter worker typecheck
+      - run: pnpm --filter worker lint
+      - run: pnpm --filter worker test
+
+  mobile:
+    name: mobile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @line-crm/shared build
+      - run: pnpm --filter @line-crm/admin-client build
+      - run: pnpm --filter @line-harness/sdk build
+      - run: pnpm --filter mobile typecheck
+      - run: pnpm --filter mobile lint
+      - run: pnpm --filter mobile test
+
+  ci:
+    name: ci
+    if: always()
+    needs: [packages, web, worker, mobile]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every job to pass
+        run: |
+          set -eu
+          results="${{ needs.packages.result }} ${{ needs.web.result }} ${{ needs.worker.result }} ${{ needs.mobile.result }}"
+          echo "job results: $results"
+          for result in $results; do
+            if [ "$result" != "success" ]; then
+              echo "A required job did not succeed."
+              exit 1
+            fi
+          done

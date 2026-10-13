@@ -1,0 +1,15 @@
+---
+description: LINE CRM の PR レビュー観点（正しさ、型、既存アプリ、API キー、LINE ポリシー）
+alwaysApply: true
+---
+
+# レビュー観点
+
+詳細はリポジトリ直下の `REVIEW.md`。PR では次を確認する。
+
+- 正しさ: Worker の API 契約と、管理画面の `api` / `fetchApi` の呼び出しを壊していない。テストを消して通していない。
+- 型: `any` で握りつぶさない。共有型は `@line-crm/shared` と `@line-crm/admin-client` と `@line-harness/sdk` に置く。
+- Web と Worker を壊さない: ログイン、`lh_api_key`、`NEXT_PUBLIC_API_URL` が無いと Web のビルドが失敗する契約を守る。Worker の認可と配信をモバイル用の下準備で変えない。
+- API キー: ソース、ログ、テスト出力、PR にキーや `EXPO_TOKEN` を出さない。`NEXT_PUBLIC_` / `EXPO_PUBLIC_` に秘密を入れない。Web は localStorage、モバイルは expo-secure-store。
+- LINE のポリシー: スパム配信の強化、公式アプリのなりすまし、規約回避、権限を超えたトーク取得は入れない。このアプリは自社 Worker を叩くオペレーター用。
+- 仕様が未決の画面はプレースホルダのまま。機能画面は別 PR（ログイン、友だち、受信箱、配信、プッシュ、ダッシュボード、ストア申請）。

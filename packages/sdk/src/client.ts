@@ -40,13 +40,21 @@ export class LineHarness {
   readonly sendFlexToFriend: (friendId: string, flexJson: string) => Promise<{ messageId: string }>
 
   constructor(config: LineHarnessConfig) {
-    this.apiUrl = config.apiUrl.replace(/\/$/, '')
+    if (!config.apiUrl && !config.credentials) {
+      throw new Error('LineHarness requires apiUrl or credentials')
+    }
+    if (!config.apiKey && !config.credentials) {
+      throw new Error('LineHarness requires apiKey or credentials')
+    }
+
+    this.apiUrl = config.apiUrl?.replace(/\/$/, '') ?? ''
     this.defaultAccountId = config.lineAccountId
 
     const http = new HttpClient({
       baseUrl: this.apiUrl,
-      apiKey: config.apiKey,
+      apiKey: config.apiKey ?? '',
       timeout: config.timeout ?? 30_000,
+      credentials: config.credentials,
     })
 
     this.friends = new FriendsResource(http, this.defaultAccountId)
@@ -79,6 +87,11 @@ export class LineHarness {
    * @param redirect - URL to redirect after completion
    */
   getAuthUrl(options?: { ref?: string; redirect?: string }): string {
+    if (!this.apiUrl) {
+      throw new Error(
+        'apiUrl is not set. Pass apiUrl to LineHarness when you need a synchronous auth URL.',
+      )
+    }
     const url = new URL(`${this.apiUrl}/auth/line`)
     if (options?.ref) url.searchParams.set('ref', options.ref)
     if (options?.redirect) url.searchParams.set('redirect', options.redirect)

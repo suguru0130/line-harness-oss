@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { useAccount } from '@/contexts/account-context'
 import type { AccountWithStats } from '@/contexts/account-context'
 import { countryFlag } from '@/lib/country-flag'
+import { webCredentialStore } from '@/lib/credential-store'
 
 // ─── メニュー定義（ユーザー目線のカテゴリ） ───
 
@@ -312,10 +313,15 @@ export default function Sidebar() {
         <p className="text-xs text-gray-400">L Harness v{process.env.APP_VERSION || '0.0.0'}</p>
         <button
           onClick={() => {
-            localStorage.removeItem('lh_api_key')
-            localStorage.removeItem('lh_staff_name')
-            localStorage.removeItem('lh_staff_role')
-            window.location.href = '/login'
+            void (async () => {
+              try {
+                await webCredentialStore.clear()
+              } finally {
+                localStorage.removeItem('lh_staff_name')
+                localStorage.removeItem('lh_staff_role')
+                window.location.href = '/login'
+              }
+            })()
           }}
           className="flex items-center gap-2 text-xs text-gray-400 hover:text-red-500 transition-colors"
         >
