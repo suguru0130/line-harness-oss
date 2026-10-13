@@ -126,7 +126,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       try {
         const apiKey = input.apiKey.trim()
         const probed = await probeApiKey({
-          fetchImpl: fetch,
+          // 識別子の fetch を渡すとブラウザでは this が外れる。メソッド呼び出しにする。
+          fetchImpl: (request, init) => globalThis.fetch(request, init),
           serverUrl: input.serverUrl,
           apiKey,
         })

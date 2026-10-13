@@ -1,3 +1,5 @@
+import './bind-fetch'
+
 import {
   api,
   createSecureStoreCredentialStore,
