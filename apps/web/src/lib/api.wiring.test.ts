@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { API_KEY_STORAGE_KEY } from '@line-crm/shared'
+import { API_KEY_STORAGE_KEY, SERVER_URL_STORAGE_KEY } from '@line-crm/shared'
 
 function installMemoryStorage() {
   const data = new Map<string, string>()
@@ -25,6 +25,13 @@ describe('web API credential wiring', () => {
     expect(await webCredentialStore.getServerUrl()).toBe('https://example.test')
     await webCredentialStore.clear()
     expect(data.has(API_KEY_STORAGE_KEY)).toBe(false)
+    expect(await webCredentialStore.getServerUrl()).toBe('https://example.test')
+  })
+
+  it('keeps the baked server URL when localStorage has a non-http override', async () => {
+    const data = installMemoryStorage()
+    data.set(SERVER_URL_STORAGE_KEY, 'file:///tmp/secret')
+    const { webCredentialStore } = await import('./credential-store')
     expect(await webCredentialStore.getServerUrl()).toBe('https://example.test')
   })
 

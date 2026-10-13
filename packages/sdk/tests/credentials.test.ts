@@ -51,4 +51,46 @@ describe('pluggable credentials', () => {
     )
     vi.unstubAllGlobals()
   })
+
+  it('does not send the API key when the server URL is not http(s)', async () => {
+    const http = new HttpClient({
+      baseUrl: 'https://unused.example.com',
+      apiKey: 'unused',
+      timeout: 5000,
+      credentials: {
+        getServerUrl: async () => 'file:///tmp/secret',
+        getApiKey: async () => 'mobile-key',
+      },
+    })
+    const mockFetch = vi.fn()
+    vi.stubGlobal('fetch', mockFetch)
+    await expect(http.get('/api/friends')).rejects.toThrow(/http/)
+    expect(mockFetch).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+
+  it('treats an empty stored key as unset and uses the constructor key', async () => {
+    const http = new HttpClient({
+      baseUrl: 'https://unused.example.com',
+      apiKey: 'baked-key',
+      timeout: 5000,
+      credentials: {
+        getServerUrl: async () => 'https://override.example.com/',
+        getApiKey: async () => '',
+      },
+    })
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ success: true }),
+    })
+    vi.stubGlobal('fetch', mockFetch)
+    await http.get('/api/friends')
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://override.example.com/api/friends',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer baked-key' }),
+      }),
+    )
+    vi.unstubAllGlobals()
+  })
 })

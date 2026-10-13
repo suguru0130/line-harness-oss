@@ -1,6 +1,7 @@
 import {
   API_KEY_STORAGE_KEY,
   SERVER_URL_STORAGE_KEY,
+  normalizeServerUrl,
   type ApiCredentialStore,
 } from '@line-crm/shared'
 
@@ -17,13 +18,29 @@ export interface SecureStoreLike {
 }
 
 function browserStorage(): KeyValueStorage | null {
-  if (typeof globalThis.localStorage === 'undefined') return null
-  return globalThis.localStorage
+  try {
+    if (typeof globalThis.localStorage === 'undefined') return null
+    const storage = globalThis.localStorage
+    if (typeof storage.getItem !== 'function') return null
+    return storage
+  } catch {
+    return null
+  }
+}
+
+function readHttpUrl(url: string | null | undefined): string | null {
+  if (!url) return null
+  try {
+    return normalizeServerUrl(url)
+  } catch {
+    return null
+  }
 }
 
 /**
  * Web 管理画面用。API キーは `lh_api_key`（既存ログインと同じ）。
  * サーバー URL は localStorage の上書きがあればそれ、なければビルド時の URL。
+ * http(s) 以外の上書きは無視する。無効な値で管理画面を止めない。
  */
 export function createLocalStorageCredentialStore(options?: {
   fallbackServerUrl?: string | null
@@ -35,12 +52,20 @@ export function createLocalStorageCredentialStore(options?: {
     return browserStorage()
   }
 
-  const readServerUrl = (): string | null => {
-    const stored = storage()?.getItem(SERVER_URL_STORAGE_KEY)
-    if (stored) return stored
-    return fallbackServerUrl
+  const readItem = (key: string): string | null => {
+    try {
+      return storage()?.getItem(key) ?? null
+    } catch {
+      return null
+    }
   }
-  const readApiKey = (): string | null => storage()?.getItem(API_KEY_STORAGE_KEY) ?? null
+  const readServerUrl = (): string | null => {
+    const stored = readHttpUrl(readItem(SERVER_URL_STORAGE_KEY))
+    if (stored) return stored
+    if (!fallbackServerUrl) return null
+    return normalizeServerUrl(fallbackServerUrl)
+  }
+  const readApiKey = (): string | null => readItem(API_KEY_STORAGE_KEY)
 
   return {
     async getServerUrl() {
@@ -51,10 +76,11 @@ export function createLocalStorageCredentialStore(options?: {
       return readApiKey() ?? ''
     },
     async setServerUrl(url: string) {
-      storage()?.setItem(SERVER_URL_STORAGE_KEY, url)
+      const normalized = normalizeServerUrl(url)
+      storage()?.setItem(SERVER_URL_STORAGE_KEY, normalized)
     },
     async getApiKey() {
-      return storage()?.getItem(API_KEY_STORAGE_KEY) ?? null
+      return readApiKey()
     },
     async setApiKey(apiKey: string) {
       const current = storage()
@@ -74,10 +100,10 @@ export function createLocalStorageCredentialStore(options?: {
 export function createSecureStoreCredentialStore(secureStore: SecureStoreLike): ApiCredentialStore {
   return {
     async getServerUrl() {
-      return secureStore.getItemAsync(SERVER_URL_STORAGE_KEY)
+      return readHttpUrl(await secureStore.getItemAsync(SERVER_URL_STORAGE_KEY))
     },
     async setServerUrl(url: string) {
-      await secureStore.setItemAsync(SERVER_URL_STORAGE_KEY, url)
+      await secureStore.setItemAsync(SERVER_URL_STORAGE_KEY, normalizeServerUrl(url))
     },
     async getApiKey() {
       return secureStore.getItemAsync(API_KEY_STORAGE_KEY)

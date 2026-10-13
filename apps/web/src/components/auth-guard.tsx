@@ -15,12 +15,16 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
         setChecked(true)
         return
       }
-      const key = await webCredentialStore.getApiKey()
-      if (cancelled) return
-      if (!key) {
-        router.replace('/login')
-      } else {
-        setChecked(true)
+      try {
+        const key = await webCredentialStore.getApiKey()
+        if (cancelled) return
+        if (!key) {
+          router.replace('/login')
+        } else {
+          setChecked(true)
+        }
+      } catch {
+        if (!cancelled) router.replace('/login')
       }
     }
     void check()

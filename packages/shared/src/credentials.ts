@@ -10,6 +10,18 @@ export const API_KEY_STORAGE_KEY = 'lh_api_key'
 /** サーバー URL の上書き。Web は未設定なら NEXT_PUBLIC_API_URL に戻る。 */
 export const SERVER_URL_STORAGE_KEY = 'lh_server_url'
 
+/**
+ * 保存されたサーバー URL を、API キーを付ける前に http(s) だけに揃える。
+ * 末尾のスラッシュは除く。`file:` や `javascript:` はここではじく。
+ */
+export function normalizeServerUrl(url: string): string {
+  const trimmed = url.trim().replace(/\/+$/, '')
+  if (!/^https?:\/\//i.test(trimmed)) {
+    throw new Error('Server URL must start with http:// or https://')
+  }
+  return trimmed
+}
+
 export interface ApiCredentialStore {
   getServerUrl(): Promise<string | null>
   setServerUrl(url: string): Promise<void>

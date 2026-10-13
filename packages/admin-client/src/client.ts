@@ -1,3 +1,4 @@
+import { normalizeServerUrl } from '@line-crm/shared'
 import type {
   Friend,
   Tag,
@@ -71,14 +72,6 @@ function readApiKeySync(): string {
   return credentialStore?.getApiKeySync?.() ?? ''
 }
 
-function normalizeServerUrl(url: string): string {
-  const trimmed = url.trim().replace(/\/$/, '')
-  if (!/^https?:\/\//i.test(trimmed)) {
-    throw new Error('Server URL must start with http:// or https://')
-  }
-  return trimmed
-}
-
 /**
  * Worker への共通 fetch。
  * API キーはバンドルに埋め込まず、呼び出しのたびに credential store から読む。
@@ -91,8 +84,9 @@ export async function fetchApi<T>(path: string, options?: RequestInit): Promise<
   if (!rawUrl) {
     throw new Error('Server URL is not set.')
   }
+  const apiUrl = normalizeServerUrl(rawUrl)
   const apiKey = (await credentialStore.getApiKey()) ?? ''
-  const res = await fetch(`${normalizeServerUrl(rawUrl)}${path}`, {
+  const res = await fetch(`${apiUrl}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',

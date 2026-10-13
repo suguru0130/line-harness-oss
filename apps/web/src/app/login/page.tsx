@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { normalizeServerUrl } from '@line-crm/shared'
 import { webCredentialStore } from '@/lib/credential-store'
 
 export default function LoginPage() {
@@ -15,10 +16,18 @@ export default function LoginPage() {
     setError('')
 
     try {
-      // Validate by calling a simple endpoint
-      const apiUrl = await webCredentialStore.getServerUrl()
-      if (!apiUrl) {
-        setError('NEXT_PUBLIC_API_URL is not set in build env')
+      // キーを付ける前に URL を確かめる。http(s) 以外には送らない。
+      let apiUrl: string
+      try {
+        const storedUrl = await webCredentialStore.getServerUrl()
+        if (!storedUrl) {
+          setError('NEXT_PUBLIC_API_URL is not set in build env')
+          setLoading(false)
+          return
+        }
+        apiUrl = normalizeServerUrl(storedUrl)
+      } catch {
+        setError('サーバー URL は http:// または https:// で始まる必要があります')
         setLoading(false)
         return
       }

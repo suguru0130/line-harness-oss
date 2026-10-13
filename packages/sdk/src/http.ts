@@ -1,6 +1,19 @@
 import { LineHarnessError } from './errors.js'
 import type { ApiCredentialSource } from './types.js'
 
+/** Same rule as `normalizeServerUrl` in `@line-crm/shared`. This package does not depend on it. */
+function normalizeHttpServerUrl(url: string): string {
+  const trimmed = url.trim().replace(/\/+$/, '')
+  if (!/^https?:\/\//i.test(trimmed)) {
+    throw new LineHarnessError(
+      'Server URL must start with http:// or https://',
+      0,
+      'credentials',
+    )
+  }
+  return trimmed
+}
+
 interface HttpClientConfig {
   baseUrl: string
   apiKey: string
@@ -26,12 +39,13 @@ export class HttpClient {
       return { baseUrl: this.baseUrl, apiKey: this.apiKey }
     }
     const serverUrl = await this.credentials.getServerUrl()
-    const apiKey = await this.credentials.getApiKey()
-    const baseUrl = (serverUrl ?? this.baseUrl).replace(/\/$/, '')
-    if (!baseUrl) {
+    const chosen = (serverUrl ?? this.baseUrl).trim()
+    if (!chosen) {
       throw new LineHarnessError('Server URL is not set', 0, 'credentials')
     }
-    return { baseUrl, apiKey: apiKey ?? this.apiKey }
+    const baseUrl = normalizeHttpServerUrl(chosen)
+    const apiKey = await this.credentials.getApiKey()
+    return { baseUrl, apiKey: apiKey ? apiKey : this.apiKey }
   }
 
   async get<T = unknown>(path: string): Promise<T> {
