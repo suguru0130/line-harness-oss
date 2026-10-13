@@ -127,6 +127,8 @@ function okFetch(bodies: unknown[]): typeof fetch {
 describe('push copy', () => {
   test('does not put stored image JSON into the notification body', () => {
     expect(previewFromStoredContent('{"previewUrl":"https://example.test/secret"}')).toBe('[メッセージ]');
+    expect(previewFromStoredContent('["https://example.test/secret"]')).toBe('[メッセージ]');
+    expect(previewFromStoredContent('[重要] 明日お願いします')).toBe('[重要] 明日お願いします');
     expect(previewFromStoredContent('  こんにちは  ')).toBe('こんにちは');
   });
 });
@@ -203,6 +205,45 @@ describe('Expo push HTTP', () => {
         { fetchImpl: failing },
       ),
     ).rejects.toThrow('HTTP 500');
+  });
+
+  test('aborts a hung request without putting the message body in the error', async () => {
+    const fetchImpl = ((_url: string, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        const signal = init?.signal;
+        if (!signal) {
+          reject(new Error('missing timeout signal'));
+          return;
+        }
+        signal.addEventListener('abort', () => {
+          const err = new Error('The operation was aborted');
+          err.name = 'TimeoutError';
+          reject(err);
+        });
+      })) as typeof fetch;
+
+    const error = await sendExpoPushMessages(
+      [
+        {
+          to: TOKEN_A,
+          title: 't',
+          body: SECRET_BODY,
+          sound: 'default',
+          priority: 'high',
+          data: { kind: 'new_message' },
+        },
+      ],
+      { fetchImpl, timeoutMs: 20 },
+    ).then(
+      () => {
+        throw new Error('expected timeout');
+      },
+      (err: unknown) => err,
+    );
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain('timeout');
+    expect((error as Error).message).not.toContain(SECRET_BODY);
+    expect((error as Error).message).not.toContain(TOKEN_A);
   });
 });
 
@@ -421,6 +462,120 @@ describe('staff push delivery', () => {
     const bodies: unknown[] = [];
     const retried = await processUnrepliedPushAlerts(db, { now, fetchImpl: okFetch(bodies) });
     expect(retried.sent).toBe(1);
+  });
+
+  test('keeps claims that Expo already accepted when a later chunk fails', async () => {
+    const db = openDb();
+    const tokens = ['staff-a', 'staff-b', 'staff-c'].map(
+      (id) => `ExponentPushToken[${id}TokenXXXX]`,
+    );
+    const now = new Date('2026-05-10T03:00:00.000Z');
+    await db.prepare(`INSERT INTO friends (id, display_name, is_following) VALUES ('due', '田中', 1)`).run();
+    await db
+      .prepare(
+        `INSERT INTO messages_log (id, friend_id, direction, content, source, created_at)
+         VALUES ('m1', 'due', 'incoming', 'まだ', 'user', ?)`,
+      )
+      .bind(toJstString(new Date(now.getTime() - 90 * 60_000)))
+      .run();
+    for (const [index, id] of ['staff-a', 'staff-b', 'staff-c'].entries()) {
+      await insertStaff(db, id);
+      await db
+        .prepare(
+          `INSERT INTO staff_push_devices (id, staff_id, expo_push_token, platform, created_at, updated_at)
+           VALUES (?, ?, ?, 'ios', '2026-05-01T00:00:00.000+09:00', '2026-05-01T00:00:00.000+09:00')`,
+        )
+        .bind(`d-${id}`, id, tokens[index])
+        .run();
+    }
+
+    const fetchImpl = (async (_url: string, init?: RequestInit) => {
+      const parsed = JSON.parse(String(init?.body)) as Array<{ to: string }>;
+      if (parsed.some((message) => message.to === tokens[2])) {
+        return new Response('down', { status: 503 });
+      }
+      return new Response(
+        JSON.stringify({
+          data: parsed.map((message) =>
+            message.to === tokens[0]
+              ? { status: 'error', details: { error: 'DeviceNotRegistered' } }
+              : { status: 'ok', id: 't' },
+          ),
+        }),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+
+    await expect(
+      processUnrepliedPushAlerts(db, { now, fetchImpl, chunkSize: 2 }),
+    ).rejects.toThrow('HTTP 503');
+
+    const dead = await db
+      .prepare(`SELECT COUNT(*) AS c FROM staff_push_devices WHERE expo_push_token = ?`)
+      .bind(tokens[0])
+      .first<{ c: number }>();
+    expect(dead?.c).toBe(0);
+    const kept = await db
+      .prepare(`SELECT staff_id FROM staff_unreplied_alerts ORDER BY staff_id`)
+      .bind()
+      .all<{ staff_id: string }>();
+    expect(kept.results.map((row) => row.staff_id)).toEqual(['staff-a', 'staff-b']);
+
+    const bodies: Array<Array<{ to: string }>> = [];
+    const retried = await processUnrepliedPushAlerts(db, { now, fetchImpl: okFetch(bodies), chunkSize: 2 });
+    expect(retried.sent).toBe(1);
+    expect(bodies.flat().map((message) => message.to)).toEqual([tokens[2]]);
+  });
+
+  test('retries MessageRateExceeded and does not retry a permanent ticket error', async () => {
+    const db = openDb();
+    await insertStaff(db, 'staff-rate');
+    await insertStaff(db, 'staff-big');
+    await db
+      .prepare(
+        `INSERT INTO staff_push_devices (id, staff_id, expo_push_token, platform, created_at, updated_at)
+         VALUES ('d-rate', 'staff-rate', ?, 'ios', '2026-05-01T00:00:00.000+09:00', '2026-05-01T00:00:00.000+09:00'),
+                ('d-big', 'staff-big', ?, 'ios', '2026-05-01T00:00:00.000+09:00', '2026-05-01T00:00:00.000+09:00')`,
+      )
+      .bind('ExponentPushToken[rateTokenXXXX]', 'ExponentPushToken[bigTokenXXXXX]')
+      .run();
+    const now = new Date('2026-05-10T03:00:00.000Z');
+    await db.prepare(`INSERT INTO friends (id, display_name, is_following) VALUES ('due', '田中', 1)`).run();
+    await db
+      .prepare(
+        `INSERT INTO messages_log (id, friend_id, direction, content, source, created_at)
+         VALUES ('m1', 'due', 'incoming', 'まだ', 'user', ?)`,
+      )
+      .bind(toJstString(new Date(now.getTime() - 90 * 60_000)))
+      .run();
+
+    const limited = (async (_url: string, init?: RequestInit) => {
+      const parsed = JSON.parse(String(init?.body)) as Array<{ to: string }>;
+      return new Response(
+        JSON.stringify({
+          data: parsed.map((message) => ({
+            status: 'error',
+            details: {
+              error: message.to.includes('rate') ? 'MessageRateExceeded' : 'MessageTooBig',
+            },
+          })),
+        }),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+
+    const first = await processUnrepliedPushAlerts(db, { now, fetchImpl: limited });
+    expect(first.sent).toBe(0);
+    const pending = await db
+      .prepare(`SELECT staff_id FROM staff_unreplied_alerts ORDER BY staff_id`)
+      .bind()
+      .all<{ staff_id: string }>();
+    expect(pending.results.map((row) => row.staff_id)).toEqual(['staff-big']);
+
+    const bodies: Array<Array<{ to: string }>> = [];
+    const retried = await processUnrepliedPushAlerts(db, { now, fetchImpl: okFetch(bodies) });
+    expect(retried.sent).toBe(1);
+    expect(bodies.flat().map((message) => message.to)).toEqual(['ExponentPushToken[rateTokenXXXX]']);
   });
 
   test('deleting a staff member removes their device and settings', async () => {

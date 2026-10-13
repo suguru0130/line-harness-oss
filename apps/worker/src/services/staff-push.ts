@@ -20,7 +20,13 @@ import {
   type StaffPushPlatform,
   type StaffPushScope,
 } from '@line-crm/shared';
-import { sendExpoPushMessages, type ExpoPushMessage } from './expo-push.js';
+import {
+  ExpoPushRequestError,
+  isRetryableExpoError,
+  sendExpoPushMessages,
+  type ExpoPushMessage,
+  type ExpoPushTicketResult,
+} from './expo-push.js';
 
 export const DEFAULT_UNREPLIED_MINUTES = 60;
 export const MIN_UNREPLIED_MINUTES = 1;
@@ -150,7 +156,14 @@ export function truncatePushText(text: string): string {
 export function previewFromStoredContent(content: string | null): string {
   if (!content) return '';
   const trimmed = content.trim();
-  if (trimmed.startsWith('{') || trimmed.startsWith('[')) return '[メッセージ]';
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (parsed !== null && typeof parsed === 'object') return '[メッセージ]';
+    } catch {
+      // 本文がたまたま括弧で始まっているだけなので、そのまま通知に載せる。
+    }
+  }
   return trimmed;
 }
 
@@ -215,6 +228,8 @@ export function buildBookingCopy(input: {
 interface NotifyOptions {
   expoAccessToken?: string;
   fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+  chunkSize?: number;
 }
 
 interface ResolvedRecipient {
@@ -246,21 +261,45 @@ function matchesAssignment(recipient: ResolvedRecipient, operatorId: string | nu
   return operatorId !== null && operatorId === recipient.staffId;
 }
 
+function expoRequestOptions(options: NotifyOptions | undefined) {
+  return {
+    accessToken: options?.expoAccessToken,
+    fetchImpl: options?.fetchImpl,
+    timeoutMs: options?.timeoutMs,
+    chunkSize: options?.chunkSize,
+  };
+}
+
+async function removeUnregisteredDevices(db: D1Database, tickets: ExpoPushTicketResult[]): Promise<void> {
+  const dead = [
+    ...new Set(
+      tickets.filter((ticket) => ticket.errorCode === 'DeviceNotRegistered').map((ticket) => ticket.token),
+    ),
+  ];
+  if (dead.length === 0) return;
+  try {
+    await deletePushDevicesByTokens(db, dead);
+  } catch (err) {
+    console.error('staff push device cleanup failed:', err instanceof Error ? err.name : 'error');
+  }
+}
+
 async function dispatchMessages(
   db: D1Database,
   messages: ExpoPushMessage[],
   options: NotifyOptions | undefined,
-): Promise<number> {
-  if (messages.length === 0) return 0;
-  const tickets = await sendExpoPushMessages(messages, {
-    accessToken: options?.expoAccessToken,
-    fetchImpl: options?.fetchImpl,
-  });
-  const dead = tickets.filter((ticket) => ticket.errorCode === 'DeviceNotRegistered').map((ticket) => ticket.token);
-  if (dead.length > 0) {
-    await deletePushDevicesByTokens(db, dead);
+): Promise<{ sent: number; results: ExpoPushTicketResult[] }> {
+  if (messages.length === 0) return { sent: 0, results: [] };
+  try {
+    const results = await sendExpoPushMessages(messages, expoRequestOptions(options));
+    await removeUnregisteredDevices(db, results);
+    return { sent: results.filter((ticket) => ticket.ok).length, results };
+  } catch (err) {
+    if (err instanceof ExpoPushRequestError) {
+      await removeUnregisteredDevices(db, err.results);
+    }
+    throw err;
   }
-  return tickets.filter((ticket) => ticket.ok).length;
 }
 
 export async function notifyStaffOfNewMessage(
@@ -290,7 +329,7 @@ export async function notifyStaffOfNewMessage(
       data: { kind: 'new_message', friendId: input.friendId },
     });
   }
-  return { sent: await dispatchMessages(db, messages, options) };
+  return { sent: (await dispatchMessages(db, messages, options)).sent };
 }
 
 export async function notifyStaffOfBookingContext(
@@ -335,7 +374,7 @@ export async function notifyStaffOfBookingContext(
       },
     });
   }
-  return { sent: await dispatchMessages(db, messages, options) };
+  return { sent: (await dispatchMessages(db, messages, options)).sent };
 }
 
 async function notifyFromContext(
@@ -402,6 +441,7 @@ export async function processUnrepliedPushAlerts(
     incomingAt: string;
   }
   const messages: ExpoPushMessage[] = [];
+  const messageClaimKeys: string[] = [];
   const claims: ClaimKey[] = [];
   const claimed = new Set<string>();
   const notifiedAt = toJstString(now);
@@ -445,15 +485,48 @@ export async function processUnrepliedPushAlerts(
         priority: 'high',
         data: { kind: 'unreplied', friendId: candidate.friend_id },
       });
+      messageClaimKeys.push(claimKey);
     }
   }
 
+  let results: ExpoPushTicketResult[] = [];
+  let transportError: unknown = null;
   try {
-    return { sent: await dispatchMessages(db, messages, input) };
+    const dispatched = await dispatchMessages(db, messages, input);
+    results = dispatched.results;
   } catch (err) {
-    for (const claim of claims) {
-      await releaseUnrepliedAlert(db, claim);
+    transportError = err;
+    if (err instanceof ExpoPushRequestError) results = err.results;
+  }
+  await releaseUndeliveredUnrepliedClaims(db, messageClaimKeys, claims, results);
+  if (transportError) throw transportError;
+  return { sent: results.filter((ticket) => ticket.ok).length };
+}
+
+function claimKeyOf(claim: { staffId: string; friendId: string; incomingAt: string }): string {
+  return `${claim.staffId}\0${claim.friendId}\0${claim.incomingAt}`;
+}
+
+async function releaseUndeliveredUnrepliedClaims(
+  db: D1Database,
+  messageClaimKeys: string[],
+  claims: Array<{ staffId: string; friendId: string; incomingAt: string }>,
+  results: ExpoPushTicketResult[],
+): Promise<void> {
+  const delivered = new Set<string>();
+  const retry = new Set<string>();
+  for (let index = 0; index < messageClaimKeys.length; index += 1) {
+    const key = messageClaimKeys[index]!;
+    const ticket = results[index];
+    if (!ticket || isRetryableExpoError(ticket.errorCode)) {
+      retry.add(key);
+      continue;
     }
-    throw err;
+    if (ticket.ok) delivered.add(key);
+  }
+  for (const claim of claims) {
+    const key = claimKeyOf(claim);
+    if (delivered.has(key) || !retry.has(key)) continue;
+    await releaseUnrepliedAlert(db, claim);
   }
 }

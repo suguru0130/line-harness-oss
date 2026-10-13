@@ -169,7 +169,8 @@ export async function listPushRecipients(
          LEFT JOIN staff_members m
            ON m.id = d.staff_id
         WHERE COALESCE(s.enabled, 1) = 1
-          AND (d.staff_id = 'env-owner' OR m.is_active = 1)`,
+          AND (d.staff_id = 'env-owner' OR m.is_active = 1)
+        ORDER BY d.staff_id, d.expo_push_token`,
     )
     .bind(kind)
     .all<PushRecipientRow>();

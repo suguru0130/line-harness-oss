@@ -1073,13 +1073,19 @@ events.post('/api/liff/events/:id/bookings', async (c) => {
   }
 
   if (status === 'requested') {
-    try {
-      await notifyStaffOfEventBooking(c.env.DB, id, {
-        expoAccessToken: c.env.EXPO_ACCESS_TOKEN,
-      });
-    } catch (e) {
+    const task = notifyStaffOfEventBooking(c.env.DB, id, {
+      expoAccessToken: c.env.EXPO_ACCESS_TOKEN,
+    }).catch((e) => {
       console.error('[event-booking] staff push failed:', e instanceof Error ? e.name : 'error');
+    });
+    let detached = false;
+    try {
+      c.executionCtx.waitUntil(task);
+      detached = true;
+    } catch {
+      detached = false;
     }
+    if (!detached) await task;
   }
 
   return finalize(201, { id, status });
